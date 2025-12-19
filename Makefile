@@ -1,2 +1,2 @@
 build:
-	gcc memory_scanner.c -o scanner.exe
+	gcc memory_scanner.c -o scanner.exe -mwindows -lcomctl32
