@@ -43,6 +43,7 @@ int scan_type = 0;
 HANDLE process = NULL;
 HWND hwndStatus, hwndMatches, hwndFrozen;
 
+// Compare value of buffer to target value by casting values to expected types
 int compare_value(char* buffer, char* target, int type) {
     switch(type) {
         case 0: return *(int*)buffer == *(int*)target;
@@ -53,6 +54,7 @@ int compare_value(char* buffer, char* target, int type) {
     return 0;
 }
 
+// Get size of data type according to selected type
 int get_type_size(int type) {
     switch(type) {
         case 0: return sizeof(int);
@@ -63,21 +65,32 @@ int get_type_size(int type) {
     return 4;
 }
 
+/*
+* Does the initial memory scan. Scans the entire memory of the process for a given target value.
+* Stores all values it finds (until it reaches MAX_MATCHES)
+*/
 void scan_memory(char* target) {
     MEMORY_BASIC_INFORMATION mbi;
     char* addr = 0;
     match_count = 0;
     int type_size = get_type_size(scan_type);
     
+    // VirtualQueryEx retrieves information about a range of pages within the virtual address space of a specified process.
     while (VirtualQueryEx(process, addr, &mbi, sizeof(mbi))) {
+        // MEM_COMMIT = commited pages for which physical storage has been allocated (MEM_FREE, MEM_RESERVE are other possibilities)
         if (mbi.State == MEM_COMMIT && 
+            // All pages with read/write access (or execute read/write access, this is apparently legacy tho)
             (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
             
+            // Allocate buffer
             char* buffer = malloc(mbi.RegionSize);
             SIZE_T bytesRead;
             
+            // Read region of memory and store in buffer
             if (ReadProcessMemory(process, mbi.BaseAddress, buffer, mbi.RegionSize, &bytesRead)) {
+                // go through all read bytes until the last valid combination (e.g. 100 bytes, int size is 4 bytes => last valid start at 96 bytes)
                 for (SIZE_T i = 0; i < bytesRead - type_size; i++) {
+                    // Compare value of buffer to target; if match => store and increase counter
                     if (compare_value(buffer + i, target, scan_type) && match_count < MAX_MATCHES) {
                         matches[match_count].addr = (char*)mbi.BaseAddress + i;
                         match_count++;
@@ -86,19 +99,30 @@ void scan_memory(char* target) {
             }
             free(buffer);
         }
+
+        // Get next address (region in memory) by adding regionsize to current base address
         addr = (char*)mbi.BaseAddress + mbi.RegionSize;
     }
 }
 
+/*
+* Re-scans all stored matches and filters for a new given target
+*/
 void refine_scan(char* target) {
     int new_count = 0;
     int type_size = get_type_size(scan_type);
     
+    // Iterate through all matches
     for (int i = 0; i < match_count; i++) {
         char buffer[8];
         SIZE_T bytesRead;
+
+        // Again read memory of stored match
         if (ReadProcessMemory(process, matches[i].addr, buffer, type_size, &bytesRead)) {
+            // Compare if the value now reflects the new target
             if (compare_value(buffer, target, scan_type)) {
+                // Overwrite old matches with new index (again starting at 0). 
+                // Old memory will stay the same but since we adjusted the match_count this will lead to no problem
                 matches[new_count++] = matches[i];
             }
         }
@@ -106,21 +130,34 @@ void refine_scan(char* target) {
     match_count = new_count;
 }
 
+/*
+* Thread which iterates through all frozen addresses
+*/
 DWORD WINAPI freeze_thread_func(LPVOID param) {
     int type_size;
+
     while (freeze_running) {
+        // Iterate through all frozen addresses (Currently set to max 100)
         for (int i = 0; i < frozen_count; i++) {
+
+            // Only freeze actively frozen values (boolean which can be set through ui)
             if (frozen[i].active) {
                 type_size = get_type_size(frozen[i].type);
+
+                // Overwrite value in memory with our frozen value
                 WriteProcessMemory(process, frozen[i].addr, frozen[i].value, type_size, NULL);
             }
         }
+
+        // Time between overwrites. Could be adjusted to increase/decrease frequency (Add parameter?)
         Sleep(100);
     }
     return 0;
 }
 
+// Updates frozen list in gui
 void update_frozen_list() {
+    // Reset list of frozen items in gui
     SendMessage(hwndFrozen, LB_RESETCONTENT, 0, 0);
     int type_size;
     
@@ -136,6 +173,8 @@ void update_frozen_list() {
             case 2: sprintf(text, "%s 0x%p = %lf", status, frozen[i].addr, *(double*)frozen[i].value); break;
             case 3: sprintf(text, "%s 0x%p = %u", status, frozen[i].addr, *(unsigned char*)frozen[i].value); break;
         }
+
+        // Add new text to list of frozen parameters
         SendMessage(hwndFrozen, LB_ADDSTRING, 0, (LPARAM)text);
     }
 }
