@@ -1,1 +1,11 @@
+# Executables
 *.exe
+
+# Object files
+*.o
+
+# Build directory
+build/
+
+# Temporary files
+nul
