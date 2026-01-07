@@ -63,7 +63,7 @@ int is_pointer_to_match(void* addr, void** out_target) {
     if (!ReadProcessMemory(process, addr, &ptr, ptr_size(), &read))
         return 0;
 
-    // Check if size of read memory equals expected size
+    // Check if size of read memory equals expected size (size of pointer)
     if (read != (SIZE_T)ptr_size())
         return 0;
 
@@ -71,7 +71,7 @@ int is_pointer_to_match(void* addr, void** out_target) {
     for (int i = 0; i < match_count; i++) {
         if (matches[i].addr == ptr) {
             // Store ptr into out_target (if set)
-            if (out_target) 
+            if (out_target)
                 *out_target = ptr;
 
             // Return 1 = is pointer
@@ -83,7 +83,7 @@ int is_pointer_to_match(void* addr, void** out_target) {
 }
 
 /*
- * 
+ * Iterates through all matches and classifies them as pointer or non-pointers
  */
 void classify_matches(void) {
     // Check if current type size could even be a pointer (if scanned data size does not equal pointer size then -> cannot be a pointer)
@@ -112,21 +112,22 @@ void scan_memory(char* target) {
     char* addr = 0;
     match_count = 0;
     int type_size = get_type_size(scan_type);
-    
+
     // VirtualQueryEx retrieves information about a range of pages within the virtual address space of a specified process.
     while (VirtualQueryEx(process, addr, &mbi, sizeof(mbi))) {
         // MEM_COMMIT = commited pages for which physical storage has been allocated (MEM_FREE, MEM_RESERVE are other possibilities)
-        if (mbi.State == MEM_COMMIT && 
+        if (mbi.State == MEM_COMMIT &&
             // All pages with read/write access (or execute read/write access, this is apparently legacy tho)
             (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE)) {
-            
+
             // Allocate buffer
             char* buffer = malloc(mbi.RegionSize);
             SIZE_T bytesRead;
-            
+
             // Read region of memory and store in buffer
             if (ReadProcessMemory(process, mbi.BaseAddress, buffer, mbi.RegionSize, &bytesRead)) {
-                // go through all read bytes until the last valid combination (e.g. 100 bytes, int size is 4 bytes => last valid start at 96 bytes)
+                // go through all read bytes until the last valid combination
+                // (e.g. 100 bytes, int size is 4 bytes => last valid start at 96 bytes)
                 for (SIZE_T i = 0; i + type_size <= bytesRead; i++) {
                     // Compare value of buffer to target; if match => store and increase counter
                     if (compare_value(buffer + i, target, scan_type) && match_count < MAX_MATCHES) {
@@ -151,7 +152,7 @@ void scan_memory(char* target) {
 void refine_scan(char* target) {
     int new_count = 0;
     int type_size = get_type_size(scan_type);
-    
+
     // Iterate through all matches
     for (int i = 0; i < match_count; i++) {
         char buffer[8];
@@ -161,8 +162,9 @@ void refine_scan(char* target) {
         if (ReadProcessMemory(process, matches[i].addr, buffer, type_size, &bytesRead)) {
             // Compare if the value now reflects the new target
             if (compare_value(buffer, target, scan_type)) {
-                // Overwrite old matches with new index (again starting at 0). 
-                // Old memory will stay the same but since we adjusted the match_count this will lead to no problem
+                // Overwrite old matches with new index (again starting at 0).
+                // Old memory will stay the same but since we adjusted the match_count this
+                // will lead to no problem
                 matches[new_count++] = matches[i];
             }
         }
