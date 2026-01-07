@@ -17,32 +17,33 @@ int compare_processes(const void* a, const void* b) {
 }
 
 /*
-* (Re-)poppulates the list of processes in the gui. 
-*/  
+* (Re-)poppulates the list of processes in the gui.
+*/
 void populate_process_list(HWND hwndList, const char* filter) {
     SendMessage(hwndList, LB_RESETCONTENT, 0, 0);
-    
+
     // Get snapshot of current system processes
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) return;
-    
+
     PROCESSENTRY32 pe;
     pe.dwSize = sizeof(PROCESSENTRY32);
-    
+
     process_count = 0;
     if (Process32First(snapshot, &pe)) { // Retrieve first process in system snapshots
         do {
             strcpy(processes[process_count].name, pe.szExeFile);
             processes[process_count].pid = pe.th32ProcessID;
             process_count++;
-        } while (Process32Next(snapshot, &pe) && process_count < 1000); // Retrieve the next process in snapshot (until limit of 1000)
+        } while (Process32Next(snapshot, &pe) && process_count < 1000); // Retrieve the next process in snapshot
+                                                                        // (until limit of 1000)
     }
-    
+
     CloseHandle(snapshot);
-    
+
     // (Quick-)Sort all retrived processes by name (using compare_processes func for evaluation)
     qsort(processes, process_count, sizeof(ProcessInfo), compare_processes);
-    
+
     // Iterate through all processes and populate gui
     for (int i = 0; i < process_count; i++) {
 
@@ -54,13 +55,13 @@ void populate_process_list(HWND hwndList, const char* filter) {
             strcpy(lower_filter, filter);
             _strlwr(lower_name);
             _strlwr(lower_filter);
-            
+
             // Check if name fits in filter
             if (strstr(lower_name, lower_filter) == NULL) {
                 continue;
             }
         }
-        
+
         // Set text of list entry for current process
         char text[512];
         sprintf(text, "%s (PID: %lu)", processes[i].name, processes[i].pid);
