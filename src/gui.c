@@ -33,12 +33,16 @@ void update_frozen_list(void) {
     }
 }
 
+/*
+* Updates (re-renders) list of matches
+*/
 void update_matches_list(void) {
     ListView_DeleteAllItems(hwndMatches);
 
     int show = match_count < 100 ? match_count : 100;
     int type_size = get_type_size(scan_type);
 
+    // Iterate through matches (max amount of 100)
     for (int i = 0; i < show; i++) {
         char valueText[64] = "";
         char addrText[32];
@@ -48,8 +52,10 @@ void update_matches_list(void) {
         char buffer[8];
         SIZE_T bytesRead;
 
+        // Get values of match
         ReadProcessMemory(process, matches[i].addr, buffer, type_size, &bytesRead);
 
+        // Format text
         sprintf(addrText, "0x%p", matches[i].addr);
         sprintf(ptrText, matches[i].is_pointer ? "YES" : "NO");
 
@@ -70,11 +76,13 @@ void update_matches_list(void) {
         item.pszText = "";
         item.lParam = i;
 
+        // Insert new item in list
         ListView_InsertItem(hwndMatches, &item);
 
         char indexText[16];
         sprintf(indexText, "%d", i);
 
+        // Set texts of item in list
         ListView_SetItemText(hwndMatches, i, 0, indexText);
         ListView_SetItemText(hwndMatches, i, 1, addrText);
         ListView_SetItemText(hwndMatches, i, 2, valueText);
@@ -83,8 +91,13 @@ void update_matches_list(void) {
     }
 }
 
+/*
+* Window Procedure. Central Message Handler of our window. ("main process" in win32 gui applications)
+*/
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // Handle all different events
     switch (uMsg) {
+        // Window create event -> instantiate all our gui elements and fill them with initial values
         case WM_CREATE: {
             InitCommonControls();
             
@@ -140,6 +153,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
         
+        // Window Command event (gui-element was triggered, e.g. button)
         case WM_COMMAND: {
             switch (LOWORD(wParam)) {
                 case ID_SEARCH_EDIT: {

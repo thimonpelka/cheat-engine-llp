@@ -8,16 +8,25 @@ int match_count = 0;
 int scan_type = 0;
 HANDLE process = NULL;
 
+/*
+ * Detects whether the given target process is 64-bit
+ */
 int is_x64(void) {
     BOOL wow64;
     IsWow64Process(process, &wow64);
-    return !wow64; // crude but works for scanner
+    return !wow64; // crude but works for scanner (would not detect native 32-bit OS, but thats fine here)
 }
 
+/*
+ * Returns the size of a pointer in the target process (depends on whether the target process is 64 or 32 bit)
+ */
 int ptr_size(void) {
     return is_x64() ? 8 : 4;
 }
 
+/*
+ * Get size of currently selected datatype (in bytes)
+ */
 int get_type_size(int type) {
     switch(type) {
         case SCAN_TYPE_INT: return sizeof(int);
@@ -28,6 +37,9 @@ int get_type_size(int type) {
     return 4;
 }
 
+/*
+ * Compare two values of a given type (dynamically)
+ */
 int compare_value(char* buffer, char* target, int type) {
     switch(type) {
         case SCAN_TYPE_INT: return *(int*)buffer == *(int*)target;
@@ -38,27 +50,45 @@ int compare_value(char* buffer, char* target, int type) {
     return 0;
 }
 
+
+/*
+ * Checks if the given pointer (addr) points to one of our known matches
+ * Used for pointer scanning / pointer path discovery
+ */
 int is_pointer_to_match(void* addr, void** out_target) {
     SIZE_T read;
     void* ptr = NULL;
 
+    // Try to read memory
     if (!ReadProcessMemory(process, addr, &ptr, ptr_size(), &read))
         return 0;
 
+    // Check if size of read memory equals expected size
     if (read != (SIZE_T)ptr_size())
         return 0;
 
+    // Iterate through all matches and compare if their address equals our pointer
     for (int i = 0; i < match_count; i++) {
         if (matches[i].addr == ptr) {
-            if (out_target) *out_target = ptr;
+            // Store ptr into out_target (if set)
+            if (out_target) 
+                *out_target = ptr;
+
+            // Return 1 = is pointer
             return 1;
         }
     }
+    // Return 0 = is no pointer
     return 0;
 }
 
+/*
+ * 
+ */
 void classify_matches(void) {
+    // Check if current type size could even be a pointer (if scanned data size does not equal pointer size then -> cannot be a pointer)
     if (get_type_size(scan_type) != ptr_size()) {
+        // if not pointer sized -> mark everything as non-pointer
         for (int i = 0; i < match_count; i++) {
             matches[i].is_pointer = 0;
             matches[i].points_to = NULL;
@@ -66,6 +96,7 @@ void classify_matches(void) {
         return;
     }
 
+    // Else -> test each match for whether its a pointer or not
     for (int i = 0; i < match_count; i++) {
         matches[i].is_pointer =
             is_pointer_to_match(matches[i].addr, &matches[i].points_to);

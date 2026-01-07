@@ -6,13 +6,13 @@
 FrozenAddress frozen[MAX_FROZEN];
 int frozen_count = 0;
 HANDLE freeze_thread = NULL;
-int freeze_running = 0;
+int freeze_running = 0; // Indicates if freeze should keep going
 
 /*
 * Thread which iterates through all frozen addresses
 */
 DWORD WINAPI freeze_thread_func(LPVOID param) {
-    (void)param;  // Unused
+    (void)param;  // Intentionally Unused. param is necessary for CreateThread compatability
     int type_size;
 
     while (freeze_running) {
@@ -34,6 +34,9 @@ DWORD WINAPI freeze_thread_func(LPVOID param) {
     return 0;
 }
 
+/*
+* Starts the freeze thread (sets freeze_running to 1, creates the freeze thread)
+*/
 void start_freeze_thread(void) {
     if (!freeze_running) {
         freeze_running = 1;
@@ -41,6 +44,9 @@ void start_freeze_thread(void) {
     }
 }
 
+/*
+* Stops the freeze thread
+*/
 void stop_freeze_thread(void) {
     freeze_running = 0;
     if (freeze_thread) {
